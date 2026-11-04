@@ -1,3 +1,94 @@
-from django.shortcuts import render
+import json
+from datetime import date
 
-# Create your views here.
+from django.forms.models import model_to_dict
+from django.http import HttpResponseNotAllowed, JsonResponse
+
+from core.models import Tarea
+
+
+def listar_tareas(request):
+    """
+    Gestiona la colección de tareas mediante HTTP.
+
+    GET: devuelve todas las tareas.
+    POST: valida los datos recibidos y crea una tarea.
+
+    Las tareas nuevas comienzan con completada=False.
+    """
+
+    # Consultar todas las tareas existentes
+    if request.method == "GET":
+        tareas = list(Tarea.objects.values())
+        return JsonResponse(tareas, safe=False, status=200)
+
+    # Crear una nueva tarea
+    if request.method == "POST":
+
+        # Decodificamos el JSON y verificamos su estructura
+        try:
+            tarea_nueva = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "JSON inválido"}, status=400)
+
+        if not isinstance(tarea_nueva, dict):
+            return JsonResponse({"error": "No es un diccionario"}, status=400)
+
+        if not tarea_nueva:
+            return JsonResponse({"error": "El diccionario está vacío"}, status=400)
+
+        if "titulo" not in tarea_nueva:
+            return JsonResponse({"error" : "Clave título inexistente"}, status=400)
+
+        titulo = tarea_nueva["titulo"]
+
+        if not isinstance(titulo, str):
+            return JsonResponse({"error": "El campo título tiene que ser un dato tipo str"}, status=400)
+
+        # Normalizamos el título antes de comprobar que no esté vacío
+        titulo = titulo.strip()
+
+        if not titulo:
+            return JsonResponse({"error": "El título no puede ser una cadena vacía"}, status=400)
+
+        if len(titulo) > 100:
+            return JsonResponse({"error": "El título no puede contener más de 100 caracteres"}, status=400)
+
+        if "descripcion" not in tarea_nueva:
+            descripcion = ""
+        else:
+            descripcion = tarea_nueva["descripcion"]
+
+        if not isinstance(descripcion, str):
+            return JsonResponse({"error": "La descripción debe ser un dato tipo str"}, status=400)
+
+        if "fecha_limite" not in tarea_nueva:
+            fecha_limite = None
+        else:
+            fecha_limite = tarea_nueva["fecha_limite"]
+
+        # Si se proporciona una fecha límite, validamos que esté correctamente dada
+        if fecha_limite is not None:
+
+            if not isinstance(fecha_limite, str):
+                return JsonResponse({"error": "La fecha límite tiene que tener el tipo de dato str"}, status=400)
+
+            try:
+                fecha_limite = date.fromisoformat(fecha_limite)
+            except ValueError:
+                return JsonResponse({"error": "La fecha límite tiene que tener el formato YYYY-MM-DD"}, status=400)
+
+        tarea_nueva_db = Tarea.objects.create(
+            titulo=titulo,
+            descripcion=descripcion,
+            fecha_limite=fecha_limite,
+            completada=False
+        )
+
+        tarea_nueva_mandar = model_to_dict(tarea_nueva_db)
+        tarea_nueva_mandar["id"] = tarea_nueva_db.id
+
+        return JsonResponse(tarea_nueva_mandar, status=201)
+        
+
+    return HttpResponseNotAllowed(["GET", "POST"])
