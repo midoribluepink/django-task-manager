@@ -88,7 +88,50 @@ def listar_tareas(request):
         tarea_nueva_mandar = model_to_dict(tarea_nueva_db)
         tarea_nueva_mandar["id"] = tarea_nueva_db.id
 
-        return JsonResponse(tarea_nueva_mandar, status=201)
-        
+        return JsonResponse(tarea_nueva_mandar, status=201)   
 
     return HttpResponseNotAllowed(["GET", "POST"])
+
+def detalle_tarea(request, id):
+    """
+    Consulta una tarea específica mediante su identificador.
+
+    GET: devuelve los datos de la tarea solicitada.
+    """
+
+    if request.method not in ["GET", "PATCH"]:
+        return HttpResponseNotAllowed(["GET", "PATCH"])
+
+    tarea = Tarea.objects.filter(id=id).first()
+
+    if tarea is None:
+        return JsonResponse({"error": "La tarea no existe"}, status=404)
+
+    if request.method == "GET":
+        tarea_mandar = model_to_dict(tarea)
+        tarea_mandar["id"] = tarea.id
+
+        return JsonResponse(tarea_mandar, status=200)
+
+    if request.method == "PATCH":
+
+        try:
+            datos_recibidos = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "JSON inválido"}, status=400)
+
+        if not isinstance(datos_recibidos, dict):
+            return JsonResponse({"error": "El contenido debe ser un diccionario"}, status=400)
+
+        if "completada" not in datos_recibidos:
+            return JsonResponse({"error": "El campo 'completada' es necesario"}, status=400)
+
+        if not isinstance(datos_recibidos["completada"], bool):
+            return JsonResponse({"error": "El campo 'completada' tiene que ser del tipo bool"}, status=400)
+
+        tarea.completada = datos_recibidos["completada"]
+        tarea.save()
+        tarea_mandar = model_to_dict(tarea)
+        tarea_mandar["id"] = tarea.id
+
+        return JsonResponse(tarea_mandar, status=200)
