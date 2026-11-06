@@ -123,13 +123,58 @@ def detalle_tarea(request, id):
         if not isinstance(datos_recibidos, dict):
             return JsonResponse({"error": "El contenido debe ser un diccionario"}, status=400)
 
-        if "completada" not in datos_recibidos:
-            return JsonResponse({"error": "El campo 'completada' es necesario"}, status=400)
+        # Validar campo título
+        if "titulo" in datos_recibidos:
+            titulo = datos_recibidos["titulo"]
 
-        if not isinstance(datos_recibidos["completada"], bool):
-            return JsonResponse({"error": "El campo 'completada' tiene que ser del tipo bool"}, status=400)
+            if not isinstance(titulo, str):
+                return JsonResponse({"error": "El campo 'titulo' tiene que ser del tipo str"}, status=400)
 
-        tarea.completada = datos_recibidos["completada"]
+            titulo = titulo.strip()
+
+            if not titulo:
+                return JsonResponse({"error": "El campo 'titulo' no puede estar vacío"}, status=400)
+
+            if len(titulo) > 100:
+                return JsonResponse({"error": "El título no puede ser mayor a 100 caracteres"}, status=400)
+
+            tarea.titulo = titulo
+
+        # Validar campo descripcion
+        if "descripcion" in datos_recibidos:
+            descripcion = datos_recibidos["descripcion"]
+            
+            if not isinstance(descripcion, str):
+                return JsonResponse({"error": "El campo 'descripción' tiene que ser del tipo str"}, status=400)
+
+            tarea.descripcion = descripcion
+
+        # Validar fecha límite
+        if "fecha_limite" in datos_recibidos:
+            fecha_limite = datos_recibidos["fecha_limite"]
+            if fecha_limite is not None and not isinstance(fecha_limite, str):
+                return JsonResponse({"error": "El campo 'fecha límite' tiene que ser del tipo null o str"}, status=400)
+
+            if fecha_limite is None:
+                tarea.fecha_limite = None
+            else:
+                if not fecha_limite:
+                    return JsonResponse({"error": "No se ha especificado la fecha límite"}, status=400)
+
+                try:
+                    fecha_limite = date.fromisoformat(fecha_limite)
+                    tarea.fecha_limite = fecha_limite
+                except ValueError:
+                    return JsonResponse({"error": "El formato de la fecha límite es incorrecto"}, status=400)
+
+        # Validar campo completada
+        if "completada" in datos_recibidos:
+
+            if not isinstance(datos_recibidos["completada"], bool):
+                return JsonResponse({"error": "El campo 'completada' tiene que ser del tipo bool"}, status=400)
+
+            tarea.completada = datos_recibidos["completada"]
+
         tarea.save()
         tarea_mandar = model_to_dict(tarea)
         tarea_mandar["id"] = tarea.id

@@ -3,6 +3,7 @@ from django.test import TestCase
 from core.models import Tarea
 
 import json
+from datetime import date
 
 class TareaAPITests(TestCase):
 
@@ -145,11 +146,16 @@ class TareaConDatosTests(TestCase):
         self.assertTrue(self.tarea2.completada)
         self.assertEqual("Leer", self.tarea2.titulo)
 
+    
     def test_patch_tarea_invalida(self):
 
         casos = [
-            {},
-            {"titulo": "Nuevo"},
+            {"titulo": ""},
+            {"titulo": "   "},
+            {"titulo": 123},
+            {"titulo": "A" * 101},
+            {"descripcion": None},
+            {"fecha_limite": "mañana"},
             {"completada": None},
             {"completada": 1},
             {"completada": "true"},
@@ -174,6 +180,9 @@ class TareaConDatosTests(TestCase):
                 self.assertEqual(respuesta.status_code, 400)
                 self.assertIn("error", datos_respuesta)
                 self.assertFalse(self.tarea1.completada)
+                self.assertEqual("Estudiar", self.tarea1.titulo)
+                self.assertEqual("", self.tarea1.descripcion)
+                self.assertIsNone(self.tarea1.fecha_limite)
 
     def test_patch_tarea_inexistente(self):
 
@@ -184,3 +193,55 @@ class TareaConDatosTests(TestCase):
         )
 
         self.assertEqual(respuesta.status_code, 404)
+
+    def test_patch_varios_campos(self):
+
+        url = f"/api/tareas/{self.tarea1.id}/"
+
+        respuesta = self.client.patch(
+            url,
+            data=json.dumps({
+                "titulo": "Estudiar Django avanzado",
+                "descripcion": "Aprender actualizaciones parciales",
+                "fecha_limite": "2026-11-20",
+                "completada": True
+            }),
+            content_type="application/json"
+        )
+
+        datos_respuesta = respuesta.json()
+        self.tarea1.refresh_from_db()
+        self.tarea2.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(self.tarea1.titulo, datos_respuesta["titulo"])
+        self.assertEqual(self.tarea1.descripcion, datos_respuesta["descripcion"])
+        self.assertEqual(self.tarea1.fecha_limite, date.fromisoformat(datos_respuesta["fecha_limite"]))
+        self.assertTrue(self.tarea1.completada)
+        self.assertTrue(datos_respuesta["completada"])
+        self.assertEqual(datos_respuesta["id"], self.tarea1.id)
+        self.assertEqual(self.tarea2.titulo, "Leer")
+        self.assertTrue(self.tarea2.completada)
+
+    def test_patch_sin_cambios(self):
+
+        url = f"/api/tareas/{self.tarea1.id}/"
+
+        respuesta = self.client.patch(
+            url,
+            data=json.dumps({}),
+            content_type="application/json"
+        )
+
+        datos_respuesta = respuesta.json()
+        self.tarea1.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual("Estudiar", self.tarea1.titulo)
+        self.assertEqual("Estudiar", datos_respuesta["titulo"])
+        self.assertEqual("", self.tarea1.descripcion)
+        self.assertEqual("", datos_respuesta["descripcion"])
+        self.assertIsNone(self.tarea1.fecha_limite)
+        self.assertIsNone(datos_respuesta["fecha_limite"])
+        self.assertFalse(self.tarea1.completada)
+        self.assertFalse(datos_respuesta["completada"])
