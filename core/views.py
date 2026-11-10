@@ -2,7 +2,7 @@ import json
 from datetime import date
 
 from django.forms.models import model_to_dict
-from django.http import HttpResponseNotAllowed, JsonResponse
+from django.http import HttpResponseNotAllowed, JsonResponse, HttpResponse
 
 from core.models import Tarea
 
@@ -97,10 +97,16 @@ def detalle_tarea(request, id):
     Consulta una tarea específica mediante su identificador.
 
     GET: devuelve los datos de la tarea solicitada.
+
+    PATCH: modifica parcialmente una tarea
+
+    PUT: modifica totalmente una tarea
+
+    DELETE: elimina una tarea
     """
 
-    if request.method not in ["GET", "PATCH"]:
-        return HttpResponseNotAllowed(["GET", "PATCH"])
+    if request.method not in ["GET", "PATCH", "PUT", "DELETE"]:
+        return HttpResponseNotAllowed(["GET", "PATCH", "PUT", "DELETE"])
 
     tarea = Tarea.objects.filter(id=id).first()
 
@@ -180,3 +186,72 @@ def detalle_tarea(request, id):
         tarea_mandar["id"] = tarea.id
 
         return JsonResponse(tarea_mandar, status=200)
+
+    if request.method == "PUT":
+        try:
+            datos_recibidos = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "JSON inválido"}, status=400)
+
+        if not isinstance(datos_recibidos, dict):
+            return JsonResponse({"error": "Los datos recibidos tienen que ser un diccionario"}, status=400)
+
+        # Validar título
+        if "titulo" not in datos_recibidos:
+            return JsonResponse({"error": "El campo título es necesario"}, status=400)
+
+        titulo = datos_recibidos["titulo"]
+
+        if not isinstance(titulo, str):
+            return JsonResponse({"error": "El campo título tiene que ser del tipo str"}, status=400)
+
+        titulo = titulo.strip()
+
+        if not titulo:
+            return JsonResponse({"error": "El campo título no puede ser una cadena vacía"}, status=400)
+
+        if len(titulo) > 100:
+            return JsonResponse({"error": "El título no puede contener más de 100 caracteres"}, status=400)
+
+        tarea.titulo = titulo
+
+        # Validar descripción
+        descripcion = datos_recibidos.get("descripcion", "")
+
+        if not isinstance(descripcion, str):
+            return JsonResponse({"error": "El campo descripción tiene que ser del tipo str"}, status=400)
+
+        tarea.descripcion = descripcion
+
+        #Validar fecha límite
+        fecha_limite = datos_recibidos.get("fecha_limite", None)
+
+        if fecha_limite is not None:
+
+            if not isinstance(fecha_limite, str):
+                return JsonResponse({"error": "La fecha límite tiene que ser del tipo str o null"}, status=400)
+
+            try:
+                fecha_limite = date.fromisoformat(fecha_limite)
+            except ValueError:
+                return JsonResponse({"error": "El formato de la fecha límite es incorrecto"}, status=400)
+
+        tarea.fecha_limite = fecha_limite
+
+        # Validar completada
+        completada = datos_recibidos.get("completada", False)
+
+        if not isinstance(completada, bool):
+            return JsonResponse({"error": "El campo completada debe ser del tipo bool"}, status=400)
+
+        tarea.completada = completada
+
+        tarea.save()
+        tarea_mandar = model_to_dict(tarea)
+        tarea_mandar["id"] = tarea.id
+
+        return JsonResponse(tarea_mandar, status=200)
+
+    if request.method == "DELETE":
+        tarea.delete()
+        return HttpResponse(status=204)

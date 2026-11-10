@@ -245,3 +245,130 @@ class TareaConDatosTests(TestCase):
         self.assertIsNone(datos_respuesta["fecha_limite"])
         self.assertFalse(self.tarea1.completada)
         self.assertFalse(datos_respuesta["completada"])
+
+    def test_put_tarea_completa(self):
+
+        url = f"/api/tareas/{self.tarea1.id}/"
+
+        respuesta = self.client.put(
+            url,
+            data=json.dumps({
+                "titulo": "Terminar proyecto",
+                "descripcion": "Completar el gestor de tareas",
+                "fecha_limite": "2026-12-01",
+                "completada": True
+            }),
+            content_type="application/json"
+        )
+
+        datos_respuesta = respuesta.json()
+
+        self.tarea1.refresh_from_db()
+        self.tarea2.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(self.tarea1.titulo, "Terminar proyecto")
+        self.assertEqual(datos_respuesta["titulo"], "Terminar proyecto")
+        self.assertEqual(self.tarea1.descripcion, "Completar el gestor de tareas")
+        self.assertEqual(datos_respuesta["descripcion"], "Completar el gestor de tareas")
+        self.assertEqual(self.tarea1.fecha_limite, date.fromisoformat("2026-12-01"))
+        self.assertEqual(datos_respuesta["fecha_limite"], "2026-12-01")
+        self.assertTrue(self.tarea1.completada)
+        self.assertTrue(datos_respuesta["completada"])
+        self.assertEqual(self.tarea1.id, datos_respuesta["id"])
+        self.assertEqual(self.tarea2.titulo, "Leer")
+        self.assertEqual(self.tarea2.descripcion, "")
+        self.assertIsNone(self.tarea2.fecha_limite)
+        self.assertTrue(self.tarea2.completada)
+
+    def test_put_valores_predeterminados(self):
+
+        self.tarea2.descripcion = "Terminar una novela"
+        self.tarea2.fecha_limite = date(2026, 11, 20)
+        self.tarea2.save()
+
+        url = f"/api/tareas/{self.tarea2.id}/"
+
+        respuesta = self.client.put(
+            url,
+            data=json.dumps({"titulo": "Leer otra novela"}),
+            content_type="application/json"
+        )
+
+        datos_respuesta = respuesta.json()
+        self.tarea2.refresh_from_db()
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(datos_respuesta["titulo"], "Leer otra novela")
+        self.assertEqual(self.tarea2.titulo, "Leer otra novela")
+        self.assertEqual(datos_respuesta["descripcion"], "")
+        self.assertEqual(self.tarea2.descripcion, "")
+        self.assertIsNone(datos_respuesta["fecha_limite"])
+        self.assertIsNone(self.tarea2.fecha_limite)
+        self.assertFalse(datos_respuesta["completada"])
+        self.assertFalse(self.tarea2.completada)
+        self.assertEqual(datos_respuesta["id"], self.tarea2.id)
+
+    def test_put_tarea_invalida(self):
+        casos = [
+            {},
+            {"titulo": ""},
+            {"titulo": "   "},
+            {"titulo": 123},
+            {"titulo": "A" * 101},
+            {"titulo": "Válido", "descripcion": None},
+            {"titulo": "Válido", "fecha_limite": "mañana"},
+            {"titulo": "Válido", "completada": 1}
+        ]
+
+        url = f"/api/tareas/{self.tarea1.id}/"
+
+        self.tarea1.descripcion = "Estudiar Django Rest"
+        self.tarea1.fecha_limite = date(2026, 12, 12)
+        self.tarea1.completada = True
+        self.tarea1.save()
+
+        for caso in casos:
+            with self.subTest(caso=caso):
+
+                respuesta = self.client.put(
+                    url,
+                    data=json.dumps(caso),
+                    content_type="application/json"
+                )
+
+                self.tarea1.refresh_from_db()
+
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertEqual(self.tarea1.titulo, "Estudiar")
+                self.assertEqual(self.tarea1.descripcion, "Estudiar Django Rest")
+                self.assertEqual(self.tarea1.fecha_limite, date(2026, 12, 12))
+                self.assertTrue(self.tarea1.completada)
+                self.assertIn("error", respuesta.json())
+
+    def test_delete_tarea(self):
+
+        id = self.tarea1.id
+
+        url = f"/api/tareas/{id}/"
+
+        self.assertTrue(Tarea.objects.filter(id=id).exists())
+
+        respuesta = self.client.delete(url)
+
+        self.assertEqual(respuesta.status_code, 204)
+        self.assertEqual(respuesta.content, b"")
+
+        self.assertFalse(Tarea.objects.filter(id=id).exists())
+        self.assertTrue(Tarea.objects.filter(id=self.tarea2.id).exists())
+
+    def test_delete_tarea_inexistente(self):
+
+        url = "/api/tareas/9999/"
+
+        respuesta = self.client.delete(url)
+
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertIn("error", respuesta.json())
+        self.assertTrue(Tarea.objects.filter(id=self.tarea1.id).exists())
+        self.assertTrue(Tarea.objects.filter(id=self.tarea2.id).exists())
